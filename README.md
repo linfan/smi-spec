@@ -1,78 +1,51 @@
 ![SMI Logo](./images/smi-banner.png)
 
-## Service Mesh Interface
+## 服务网格接口
 
-The Service Mesh Interface (SMI) is a specification for service meshes that run
-on Kubernetes. It defines a common standard that can be implemented by a variety
-of providers. This allows for both standardization for end-users and innovation
-by providers of Service Mesh Technology. It enables flexibility and
-interoperability.
+服务网格接口（SMI）是一种运行在Kubernetes之上的服务网格规范。SMI定义了一套可由不同供应商实现的通用标准。这使得终端用户在享受一致性体验的同时，服务网格提供商能够持续进行技术创新。从而使基础设施的灵活性和厂商间的互操作性成为可能。
 
-This specification consists of multiple APIs:
+该规范由多个API组成：
 
-* [Traffic Access Control](traffic-access-control.md) - configure access to specific
-  pods and routes based on the identity of a client for locking down
-  applications to only allowed users and services.
-* [Traffic Specs](traffic-specs.md) - define how traffic looks on a per-protocol
-  basis. These resources work in concert with access control and other types of
-  policy to manage traffic at a protocol level.
-* [Traffic Split](traffic-split.md) - incrementally direct percentages of
-  traffic between various services to assist in building out canary rollouts.
-* [Traffic Metrics](traffic-metrics.md) - expose common traffic metrics for use
-  by tools such as dashboards and autoscalers.
+* [流量访问控制](traffic-access-control.md) - 配置对特定Pod的访问规则，以及根据客户端用户和服务特征锁定可访问应用程序范围的路由规则。
+* [流量规格](traffic-specs.md) - 基于通信协议定义流量的描述方式。配合访问控制以及其他网络策略实现协议级别的流量管控。
+* [流量分流](traffic-split.md) - 通过服务多个版本之间流量分布的增量调整，协助实现金丝雀发布。
+* [流量度量](traffic-metrics.md) - 提供常用的流量指标，可用于仪表板和集群扩缩容等自动化工具。
 
-See the individual documents for the details. Each document outlines:
+详细信息，请参阅各个文档。各文档结构如下：
 
-* Specification
-* Possible use cases
-* Example implementations
-* Tradeoffs
+* 规范详述
+* 运用场景
+* 示例实现
+* 设计取舍
 
-### Goals
+### 项目目标
 
-The goal of the SMI API is to provide a common, portable set of Service Mesh
-APIs which a Kubernetes user can use in a provider agnostic manner. In this way
-people can define applications that use Service Mesh technology without tightly
-binding to any specific implementation.
+SMI API的目标是提供一组通用的，可移植的服务网格API，Kubernetes用户可以以供应商无关的方式使用这些API。通过这种方式，开发者可以定义使用服务网格技术的应用程序，而无需紧密绑定到任何特定实现。
 
-### Non-Goals
+### 非项目目标
 
-It is a non-goal for the SMI project to implement a service mesh itself. It
-merely attempts to define the common specification. Likewise it is a non-goal to
-define the extent of what it means to be a Service Mesh, but rather a generally
-useful subset. If SMI providers want to add provider specific extensions and
-APIs beyond the SMI spec, they are welcome to do so. We expect that, over time,
-as more functionality becomes commonly accepted as part of what it means to be a
-Service Mesh, those definitions will migrate into the SMI specification.
+SMI项目本身不实现服务网格。SMI只是试图定义通用规范。同样，SMI不定义服务网格的具体范围，而是一个通用子集。欢迎SMI供应商添加超出SMI规范的供应商特定扩展和API。我们希望随着时间的推移，随着更多功能被普遍接受为服务网格的一部分，这些定义将迁移到SMI规范中。
 
-### Technical Overview
+### 技术概览
 
-The SMI is specified as a collection of Kubernetes Custom Resource Definitions
-(CRD) and Extension API Servers. These APIs can be installed onto any Kubernetes
-cluster and manipulated using standard tools. The APIs require an SMI provider
-to do something.
+SMI实际上是一系列Kubernetes自定义资源描述（CRD）和扩展API服务的集合。这些API可以被部署到任何Kubernetes集群上，并使用标准工具进行控制。这些API使用供应商的具体实现完成相应功能。
 
-To activate these APIs an SMI provider is run in the Kubernetes cluster. For the
-resources that enable configuration, the SMI provider reflects back on their
-contents and configures the provider's components within a cluster to implement
-the desired behavior. In the case of extension APIs, the SMI provider translates
-from internal types to those the API expects to return.
+要在Kubernetes集群中激活某个SMI供应商实现的API，只需配置相应的资源，SMI供应商组件将会依据资源描述的内容，做出恰当的行为响应。对于扩展API，SMI供应商需将程序内部类型转换为API所期望的类型返回。
 
-This approach to pluggable interfaces is similar to other core Kubernetes APIs
-like +NetworkPolicy+, +Ingress+ and +CustomMetrics+.
+这种可插拔接口的实现方式与其他核心Kubernetes API非常类似，比如`NetworkPolicy`、`Ingress`和`CustomMetrics`等。
 
+## 参与交流
 
-## Communications
+### Slack频道
 
-### Slack Channel
-#general Slack channel for related discussion in the
-[SMI Slack](http://smi-spec.slack.com).
+您可以访问[SMI Slack](http://smi-spec.slack.com)频道讨论与SMI相关的一般性问题。
 
-If you are not yet a member of the SMI Slack you may sign up [here](https://aka.ms/smi/slack).
+如果您还不是SMI的Slack成员，请在[这里](https://aka.ms/smi/slack)注册。
 
-### Contributing
+### 提交贡献
 
-Please refer to [CONTRIBUTING.md](./CONTRIBUTING.md) for more information on contributing to the specification.
+如果您希望对规范的制定做出更多贡献，请参阅[CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-### License
-The specification is licensed under [OWF Contributor License Agreement 1.0 - Copyright and Patent](http://www.openwebfoundation.org/legal/the-owf-1-0-agreements/owf-contributor-license-agreement-1-0---copyright-and-patent) in the [LICENSE](./LICENSE) file.
+### 许可协议
+
+此规范遵循[OWF Contributor License Agreement 1.0 - Copyright and Patent](http://www.openwebfoundation.org/legal/the-owf-1-0-agreements/owf-contributor-license-agreement-1-0---copyright-and-patent)许可协议，详细内容请参阅[LICENSE](./LICENSE)。
