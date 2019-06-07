@@ -1,22 +1,14 @@
-## Traffic Spec
+## 流量规格
 
-This set of resources allows users to specify how their traffic looks. It is
-used in concert with [access control](traffic-access-control.md) and other
-policies to concretely define what should happen to specific types of traffic
-as it flows through the mesh.
+这是一组允许用户描述流量特征的资源类型。它被用于在[流量访问控制](traffic-access-control.md)和其他控制策略中明确的定义在特定类型流量经过网格时应当采取的措施。
 
-There are many different protocols that users would like to have be part of a
-mesh. Right now, this is primarily HTTP, but it is possible to imagine a world
-where service meshes are aware of other protocols. Each resource in this
-specification is meant to match 1:1 with a specific protocol. This allows users
-to define the traffic in a protocol specific fashion.
+用户希望在网格中使用各种通信协议。就目前而言，最主要的是HTTP，但不妨构想一种能够感知各种通信协议的服务网格。在这个规范中，各种通信协议与特定的资源类型是一一对应的。这使得用户能够通过通信协议的特征来定义流量规格。
 
-## Specification
+## 规范详述
 
 ### HTTPRouteGroup
 
-This resource is used to describe HTTP/1 and HTTP/2 traffic. It enumerates the
-routes that can be served by an application.
+此类资源用于描述HTTP/1和HTTP/2协议的流量。它列举了应用程序提供的路由。
 
 ```yaml
 apiVersion: specs.smi-spec.io/v1alpha1
@@ -33,19 +25,11 @@ matches:
   methods: ["*"]
 ```
 
-This example defines two matches, `metrics` and `health`. The name is the
-primary key and all fields are required. A regex is used to match against the
-URI and is anchored (`^`) to the beginning of the URI. Methods can either be
-specific (`GET`) or `*` to match all methods.
+上述示例定义了两个匹配规则，`metrics`和`health`。其中`name`是主键，所有字段都是必需的。 正则表达式用于匹配URI并通过锚定符号（`^`）匹配URI的开头。`methods`字段可以指定请求方法（`GET`）或使用`*`匹配所有方法。
 
-These routes have not yet been associated with any resources. See
-[access control](traffic-access-control.md) for an example of how routes become
-associated with applications serving traffic.
+这些路由规则尚未与任何资源关联。关于如何将路由与提供流量的应用程序关联的示例，请参阅[流量访问控制](traffic-access-control.md)。
 
-The `matches` field only applies to URIs. It is common to look at other parts of
-an HTTP request. This behaviour is not yet defined; however, the spec will be
-extended at a later date to accommodate capabilities such as HTTP header,
-Host, etc.
+`matches`字段仅适用于URI。HTTP请求中的其他信息也常常会被用到。这些信息在规范中尚未定义，但是，规范在未来将会进行扩展，以支持匹配HTTP头，主机等信息。
 
 ```yaml
 apiVersion: v1beta1
@@ -59,12 +43,11 @@ matches:
   methods: ["*"]
 ```
 
-This example defines a single route that matches anything.
+这个示例定义了一个匹配任何访问的路由。
 
 ### TCPRoute
 
-This resource is used to describe L4 TCP traffic. It is a simple route which configures
-an application to receive raw non protocol specific traffic.
+此类资源用于描述4层TCP协议的流量。这是一个简单的路由规则，它将应用程序配置为接收任意的非特定协议流量。
 
 ```yaml
 apiVersion: specs.smi-spec.io/v1alpha1
@@ -73,25 +56,16 @@ metadata:
   name: tcp-route
 ```
 
-## Automatic Generation
+## 自动生成
 
-While it is possible for users to create these by hand, the recommended pattern
-is for tools to do it for the users. OpenAPI specifications can be consumed to
-generate the list of routes. gRPC protobufs can similarly be used to
-automatically generate the list of routes from code.
+虽然用户可以手动创建这些规则，但建议使用工具来生成它们。可以使用OpenAPI规范来生成路由列表。gRPC的protobufs文件也可以用于从代码自动生成类似的路由列表。
 
-## Tradeoffs
+## 设计取舍
 
-* These specifications are *not* directly associated with applications and other
-  resources. They're used to describe the type of traffic flowing through a mesh
-  and used by higher level policies such as access control or rate limiting. The
-  policies themselves bind these routes to the applications serving traffic.
+* 这些规范与应用程序和其他资源*没有*直接关联。它们用于描述流经网格的流量类型，并由更高级别的策略（如访问控制或速率限制）使用。由策略本身来将这些路由绑定到提供流量的应用程序。
 
-## Out of scope
+## 范围以外的事
 
-* gRPC - there should be a gRPC specific traffic spec. As part of the first
-  version, this has been left out as HTTPRouteGroup can be used in the interim.
+* gRPC  - 应该有一个gRPC协议对应的流量规格。作为规范的第一个版本，由于HTTPRouteGroup可以临时作为替代，因此省略了这一点。
 
-* Arbitrary header filtering - there should be a way to filter based on headers.
-  This has been left out for now, but the specification should be expanded to
-  address this use case.
+* 任意协议头过滤 - 应该有一种基于协议头的过滤方法。规范暂时没有予以涉及，但在未来的扩展中应该处理这种场景。
