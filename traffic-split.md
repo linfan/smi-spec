@@ -1,27 +1,14 @@
-## Traffic Split
+## 流量分流
 
-This resource allows users to incrementally direct percentages of traffic
-between various services. It will be used by *clients* such as ingress
-controllers or service mesh sidecars to split the outgoing traffic to different
-destinations.
+这类资源允许用户渐进式的在多个服务之间调整流量百分比。它可以被譬如Ingress控制器和服务网格的Sidecar等*客户端*用于将出口流量分发到不同的目标端。
 
-Integrations can use this resource to orchestrate canary releases for new
-versions of software. The resource itself is not a complete solution as there
-must be some kind of controller managing the traffic shifting over time.
-Weighting traffic between various services is also more generally useful than
-driving canary releases.
+加以适当的集成，这类资源可以用于新版本软件的金丝雀发布。此资源本身并不是一个完整的流量切换解决方案，因为必须有某种控制器来管理随时间变化的流量分布。比金丝雀发布更通用的场景是在多个服务实例之间进行带权重的流量分配。
 
-The resource is associated with a *root* service. This is referenced via
-`spec.service`. The `spec.service` name is the FQDN that applications will use
-to communicate. For any *clients* that are not forwarding their traffic through
-a proxy that implements this proposal, the standard Kubernetes service
-configuration would continue to operate.
+流量分流资源只与*根节点*Service对象相关联。通过`spec.service`字段引用。`spec.service`的Service对象名可作为服务间通信的正式域名（FQDN）。对于未采用遵循此规范的将流量通过代理转发的*客户端*，将继续依照标准Kubernetes的Service方式分发流量。
 
-Implementations will weight outgoing traffic between the services referenced by
-`spec.backends`. Each backend is a Kubernetes service that potentially has a
-different selector and type.
+规范的实现方需按照`spec.backends`引用Service对象的`weight`字段相应的权重分发流量。每个后端都是一个具有不同的选择器和类型的Service对象。
 
-## Specification
+## 规范详述
 
 ```yaml
 apiVersion: split.smi-spec.io/v1alpha1
@@ -42,24 +29,15 @@ spec:
     weight: 1500m
 ```
 
-### Ports
+### 端口
 
-Kubernetes services can have multiple ports. This specification does *not*
-include ports. Services define these themselves and the duplication becomes
-extra overhead for users with the potential of misconfiguration. There are some
-edge cases to be aware of.
+Kubernetes的Service对象可以有多个端口。这个规范*不包括*端口信息。在Service对象本身已经定义这些内容，重复的配置不但会为用户带来负担而且存在配置冲突的风险。这里有几种特殊情况需要注意。
 
-There *must* be a match between a port on the *root* service and a port on every
-destination backend service. If they do not match, the backend service is not
-included and will not receive traffic.
+*根节点*Service暴露的端口必须与后端Service的某个端口匹配。如果无法正确匹配，相应的后端Service对象将会被排除，不会接收任何流量。
 
-Mapping between `port` and `targetPort` occurs on each backend service
-individually. This allows for new versions of applications to change the ports
-they listen on and matches the existing implementation of Services.
+单独指定后端Service的`port`和`targetPort`字段映射。这将使新版本的应用程序更改侦听端口并匹配现有的Service实现成为可能。
 
-It is recommended that implementations issue an event when the configuration is
-incorrect. This mis-configuration can be detected as part of an admission
-controller.
+建议厂商的实现在检查到异常配置时发出事件。使得这种错误配置可以被准入控制器（Admission Controller）检测到。
 
 ```yaml
 kind: Service
@@ -105,13 +83,9 @@ spec:
     port: 9090
 ```
 
-This is a valid configuration. Traffic destined for `birds:8080` will select
-between 8080 on either `blue-birds` or `green-birds`. When the eventual
-destination of traffic is destined for `green-birds`, the `targetPort` is used
-and goes to 8081 on the destination pod.
+这是一个有效的配置。访问`birds:8080`的流量将会在`blue-birds`和`green-birds`之间分流。当流量流向`green-birds`时，`targetPort`字段表明目标Pod的8081端口会响应请求。
 
-Note: traffic destined for `birds:9090` follows the same guidelines and is in
-this example to highlight how multiple ports can work.
+注意：访问`birds:9090`的流量会遵循相同的准则进行分流，示例专门展示了存在多端口的情况。
 
 ```yaml
 kind: Service
@@ -150,27 +124,20 @@ spec:
     port: 8080
 ```
 
-This is an invalid configuration. Traffic destined for `birds:8080` will only
-ever be forwarded to port 8080 on `green-birds`. As the port is 1024 for
-`blue-birds`, there is no way for an implementation to know where the traffic is
-eventually destined on a port basis. When configuration such as this is
-observed, implementations are recommended to issue an event that notifies users
-traffic will not be split for `blue-birds` and visible with
-`kubectl describe trafficsplit`.
+这是一个无效的配置。 访问`birds:8080`的流量只会被导向`green-birds`的8080端口。因为`blue-birds`配置的端口是1024，这使得厂商在实现时无法知道流量应该如何选择端口。当遇到诸如此类的配置时，建议实现方发出一个事件以通知用户流量将不会被分流到`blue-birds`后端，并且可使用`kubectl describe trafficsplit`查看详情。
 
-## Workflow
+## 操作流程
 
-In this example workflow, the user has previously created the following
-resources:
+在此示例操作流程中，用户事先创建了以下资源：
 
-* Deployment named `foobar-v1`, with labels: `app: foobar` and `version: v1`.
-* Service named `foobar`, with a selector of `app: foobar`.
-* Service named `foobar-v1`, with selectors: `app:foobar` and `version: v1`.
-* Clients use the FQDN of `foobar` to communicate.
+* 名为`foobar-v1`的Deployment，包含有标签`app: foobar`和`version: v1`。
+* 名为`foobar`的Service，Pod选择条件为`app: foobar`。
+* 名为`foobar-v1`的Service，Pod选择条件为`app:foobar`和`version: v1`。
+* 使用正式域名`foobar`进行访问的客户端。
 
-In order to update an application, the user will perform the following actions:
+为了更新应用程序，用户将执行以下操作：
 
-* Create a new traffic split named `foobar-rollout`, it will look like:
+* 创建一个名为`foobar-rollout`的新流量分流，内容如下：
 
     ```yaml
     apiVersion: split.smi-spec.io/v1alpha1
@@ -186,24 +153,19 @@ In order to update an application, the user will perform the following actions:
         weight: 0m
     ```
 
-    **Note**: The `TrafficSplit` resource above refers to the service
-    `foobar-v2` even before it is created. It is necessary to follow this order
-    otherwise some traffic might be diverted to the the new service via `foobar`
-    service since this service caters traffic across all versions.
+    **注意：**上面的`TrafficSplit`资源在创建`foobar-v2`的Service之前就引用了它。遵循此顺序是有必要的，否则一些流量可能会通过`foobar`这个Service进入到新版本服务的Pod，因为这个Service会接收通往所有版本的流量。
 
-* Create a new deployment named `foobar-v2`, with labels: `app: foobar`,
-  `version: v2`.
-* Create a new service named `foobar-v2`, with a selector of: `app: foobar`,
-  `version: v2`.
+* 创建名为`foobar-v2`的新Deployment，标签为：`app: foobar`和
+  `version: v2`。
 
-At this point, the SMI implementation does not redirect any traffic to
-`foobar-v2`.
+* 创建一个名为`foobar-v2`的新Service，其Pod选择条件为：`app: foobar`和
+  `version: v2`。
 
-* Once the deployment is healthy, spot check by sending manual requests to the
-  `foobar-v2` service. This could be achieved via ingress, port forwarding or
-  spinning up integration tests from separate pods.
-* When ready, the user increases the weight of `foobar-v2` by updating the
-  TrafficSplit resource:
+此时，SMI的实现不会将任何流量导向`foobar-v2`。
+
+* 等到Deployment对象已经健康可用，人工访问`foobar-v2`的Service对象进行功能验证。可用通过Ingress、端口转发或对后端的Pod执行集成测试来实现。
+
+* 当一切就绪，用户可以通过更新TrafficSplit资源来增加`foobar-v2`的权重：
 
     ```yaml
     apiVersion: split.smi-spec.io/v1alpha1
@@ -219,14 +181,11 @@ At this point, the SMI implementation does not redirect any traffic to
         weight: 500m
     ```
 
-    At this point, the SMI implementation redirects approximately 33% of
-    traffic to `foobar-v2`. Note that this is on a per-client basis and not
-    global across all requests destined for these backends, because these
-    backends can receive traffic from other Kubernetes services.
+    此时，SMI的实现会将大约33％的流量导向到`foobar-v2`。请注意，这是基于每个客户端而不是所有发往这些后端的全局请求流量，因为这些后端可以从其他的Kubernetes Service收到流量。
 
-* Verify health metrics and become comfortable with the new version.
-* The user decides to let the SMI implementation redirect all traffic to the
-  new version by updating the TrafficSplit resource:
+* 验证运行状况的指标并验收新版本。
+
+* 用户通过更新TrafficSplit资源让SMI的实现将所有流量都导向到新版本：
 
     ```yaml
     apiVersion: split.smi-spec.io/v1alpha1
@@ -240,33 +199,19 @@ At this point, the SMI implementation does not redirect any traffic to
         weight: 1
     ```
 
-* Delete the old `foobar-v1` deployment.
-* Delete the old `foobar-v1` service.
-* Delete `foobar-rollout` as it is no longer needed.
+* 删除旧的`foobar-v1`Deployment对象。
+* 删除旧的`foobar-v1`Service对象。
+* 删除`foobar-rollout`流量分流对象，因为它已经没什么用了。
 
-## Tradeoffs
+## 设计取舍
 
-* Weights vs percentages - the primary reason for weights is in failure
-  situations. For example, if 50% of traffic is being sent to a service that has
-  no healthy endpoints - what happens? Weights are simpler to reason about when
-  the underlying applications are changing.
+* 权重vs百分比 - 采用权重的主要原因是处理访问失败的情况。例如，当50％的流量被指向所有端点都不可用的Service时，应该如何重新分配流量？当下层应用程序的状态发生变化时，基于权重更的配置更容易进行处理。
 
-* Selectors vs services - it would be possible to have selectors for the
-  backends at the TrafficSplit level instead of referential services. The
-  referential services are a little bit more flexible. Users will have a
-  convenient way to manually test their new versions and implementations will
-  have the opportunity to rely on Kuberentes native concepts instead of
-  implementing them independently such as endpoints.
+* 选择器vs服务 - TrafficSplit资源本可以直接设置Pod选择器而不必引用服务。但引用服务的方式会更加灵活一些。用户将能够方便的手动测试他们的新版本，厂商在实现时也能够利用Kuberentes原生元素，而不必各自重新实现Endpoint等功能。
 
-* TrafficSplits are not hierarchical - it would be possible to have
-  `spec.backends[0].service` refer to a new split. The implementation would
-  then be required to resolve this link and reason about weights. By
-  making splits non-hierarchical, implementations become simpler and loose the
-  possibility of having circular references. It is still possible to build an
-  architecture that has nested split definitions, users would need to have a
-  secondary proxy to manage that.
+* TrafficSplit不可层叠 - 让TrafficSplit的`spec.backends[0].service`引用另一个TrafficSplit本该是可行的。这需要实现方处理链接和权重的传递。通过使分流不可层叠，SMI的实现将变得更简单并且能避免循环引用的出现。用户仍然可以通过二级代理的辅助，自行构建能够定义嵌套分流的架构。
 
-* TrafficSplits cannot be self-referential - consider the following definition:
+* TrafficSplits不能自我引用 - 考虑以下资源描述：
 
     ```yaml
     apiVersion: split.smi-spec.io/v1alpha1
@@ -282,30 +227,19 @@ At this point, the SMI implementation does not redirect any traffic to
         weight: 900m
     ```
 
-    In this example, 90% of traffic would be sent to the `foobar` service. As
-    this is a superset that contains multiple versions of an application, it
-    becomes challenging for users to reason about where traffic is going.
+    在此示例中，90％的流量将被发送到名为`foobar`的Service对象。由于这是包含应用程序的多个版本的根节点Service，因此对用户流量进行流量分配的推理将变得十分困难。
 
-* Port definitions - this spec uses TrafficSplit to reference services. Services
-  have already defined ports, mappings via targetPorts and selectors for the
-  destination pods. For this reason, ports are delegated to Services. There are
-  some edge cases that arise from this decision. See [ports](#ports) for a more
-  in-depth discussion.
+* 端口定义 - 此规范使用TrafficSplit引用Service。Service已经定义了端口，通过targetPorts映射和Pod选择器连接到目标后端。因此，定义端口的职责被委派给Service。这会导致一些特殊的情况。请参阅[端口](#端口)部分的深入讨论。
 
-## Open Questions
+## 开放性问题
 
-* How should this interact with namespaces? One of the downsides to the current
-  workflow is that deployment names end up changing and require a tool such as
-  helm or kustomize. By allowing traffic to be split *between* namespaces, it
-  would be possible to keep names identical and simply clean up namespaces as
-  new versions come out.
+* TrafficSplit应该如何与Namespace交互？当前操作流程存在的一个问题是，版本更新后Deployment的名称会发生变化，需要一个像helm或kustomize这样工具来管理。通过支持在多个Namespaces*之间*分配流量，则有可能实现更新前后保持名称相同，并在新版本发布后只需简单的清理整个Namespaces。
 
-## Example implementation
+## 示例实现
 
-This example implementation is included to illustrate how the `TrafficSplit`
-object operates. It is not intended to prescribe a particular implementation.
+此示例用来说明TrafficSplit对象是如何工作的。它并不是某种特定实现的真实机制。
 
-Assume a `TrafficSplit` object that looks like:
+假设`TrafficSplit`对象内容如下：
 
 ```yaml
     apiVersion: split.smi-spec.io/v1alpha1
@@ -321,14 +255,12 @@ Assume a `TrafficSplit` object that looks like:
         weight: 900m
 ```
 
-When a new `TrafficSplit` object is created, it instantiates the following Kubernetes
-objects:
+创建新的`TrafficSplit`对象时，它会实例化以下Kubernetes对象：
 
-    * Service who's name is the same as `spec.service` in the TrafficSplit (`web`)
-    * A Deployment running `nginx` which has labels that match the Service
+* 名称与TrafficSplit（`web`）中的`spec.service`字段相同的Service
+* 运行`nginx`的Deployment，其Pod的标签与Service的选择器相匹配
 
-The nginx layer serves as an HTTP(s) layer which implements the canary. In
-particular the nginx config looks like:
+nginx层用作实现金丝雀发布的HTTP(s)代理。典型的nginx配置看起来像：
 
 ```plain
 upstream backend {
@@ -337,5 +269,4 @@ upstream backend {
 }
 ```
 
-Thus the new `web` service when accessed from a client in Kubernetes will send
-10% of it's traffic to `web-next` and 90% of it's traffic to `web`.
+因此，当从Kubernetes的客户端访问时，新的`web`Service对象会将10％的流量发送到`Web-next`，90％的流量发送到`Web-current`。
