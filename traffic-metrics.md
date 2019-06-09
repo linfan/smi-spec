@@ -1,54 +1,26 @@
-## Traffic Metrics
+## 流量度量
 
-This resource provides a common integration point for tools that can benefit by
-consuming metrics related to HTTP traffic. It follows the pattern of
-`metrics.k8s.io` for instantaneous metrics that can be consumed by CLI tooling,
-HPA scaling or automating canary updates.
+这类资源为需要获取HTTP流量相关指标的工具提供通用集成点。它遵循`metrics.k8s.io`的查询模式，可用于CLI工具、HPA扩缩容或自动化金丝雀发布。
 
-As many of the implementations for this will be storing metrics in Prometheus,
-it would be possible to just standardize on metric/label naming. This,
-unfortunately, makes integration more difficult as every integration will need
-to write their own Prometheus queries. For more details, see the
-[tradeoffs](#tradeoffs) section.
+由于许多厂商的实现都会使用Prometheus存储指标数据，因此直接采用标准化指标/标签也是可行的。不幸的是，这将使得三方集成变得更加困难，因为每个集成方都需要编写自己的Prometheus查询。关于这个话题的更多信息，请参阅[设计取舍](#设计取舍)部分。
 
-Metrics are associated with a *resource*. These can be pods as well as higher
-level concepts such as namespaces, deployments or services. All metrics are
-associated with the Kubernetes resource that is either generating or serving
-the measured traffic.
+度量指标是与*资源*关联的。这些资源可以是Pod或者更上层的概念，例如Namespace、Deployment或Service。所有度量指标都与生成或提供被测流量的Kubernetes资源相关联。
 
-Pods are the most granular resource that metrics can be associated with. It is
-common to look at aggregates of pods to reason about the traffic as a whole for
-an application. Imagine looking at the aggregated success rate for a deployment
-during canary rollouts. All resources that contain pods are aggregates of the
-metrics contained within the pods. These are calculated by the implementation
-itself. It is *not* possible to arbitrarily create groupings of pods to
-aggregate metrics.
+Pod是指标可以关联的最细粒度资源。查看Pod的聚合指标以推断应用程序的整体流量是很常见的需求。试想一下在金丝雀发布期间查看基于Deployment聚合的访问成功率。包含Pod的所有资源都可以作为Pod的聚合度量指标。这些指标需要由实现方自身进行计算。用户*不能够*随意建立Pod分组作为聚合度量的依据。
 
-In addition to resources, metrics are scoped to *edges*. An edge represents
-either the source of traffic or its destination. These edges restrict the
-metrics to only the traffic between the `resource` and `edge.resource`.
-`edge.resource` can either be general or specific. In the most general case, a
-blank `edge.resource` would have metrics for all the traffic received by
-`resource`.
+除资源的限制外，度量指标还仅限于流量的*边缘*。边缘是指流量的源或目标点。这些边缘将度量限制为仅限于`resource`字段和`edge.resource`字段引用资源之间的流量。 `edge.resource`可以是通配的也可以是明确指定的。在完全通配的情况下，空白`edge.resource`字段表明将度量`resource`所引用资源接收到的所有流量。
 
-Edges are only visible between two resources that have exchanged traffic. They
-are not declarative, all traffic is monitored and can only be queried in
-association with a specific resource. The list of edges for a specified resource
-can be returned, it is not possible to query specific, unique edges.
+边缘仅在交换流量的两个资源之间可见。它们不是声明性的，所有流量都受到监控，且只能通过关联的特定资源进行查询。可以返回指定资源的边缘列表，但无法直接查询某个特定边缘的指标。
 
-Being able to query for these metrics is an important piece of the puzzle. There
-are two main ways to query the API for metrics:
+如何查询这些指标是一个关键的难题。查询API以获取指标有的方式主要有两种：
 
-* The supported resources (pods, namespaces, ...) are available as part of an
-  `APIResourceList`. This provides both `list` and `get` support.
-* For supported resources, it is possible to use a label selector as a filter.
-* A sub-resource allows querying for all the edges associated with a specific
-  resource.
+* 通过`APIResourceList`对象上支持的资源（Pod，Namespace，...）查询。这些资源都提供了`list`和`get`操作。
+* 对于支持的资源，可以使用标签选择器作为过滤条件。
+* 使用子资源能够查询与特定资源相关联的所有边缘。
 
-## Specification
+## 规范详述
 
-The core resource is `TrafficMetrics`. It references a `resource`, has an `edge`
-and surfaces latency percentiles and request volume.
+流量度量使用的核心资源类型是`TrafficMetrics`。它能通过`resource`字段引用一个被测量资源，并包含一个`edge`字段以及测量延迟、采集请求的数量。
 
 ```yaml
 apiVersion: metrics.smi-spec.io/v1alpha1
@@ -82,12 +54,9 @@ metrics:
   value: 100
 ```
 
-### Edge
+### 边缘
 
-In this example, the metrics are observed *at* the `foo-775b9cbd88-ntxsl` pod
-and represent all the traffic *to* the `baz-577db7d977-lsk2q` pod. This
-effectively shows the traffic originating from `foo-775b9cbd88-ntxsl` and can be
-used to define a DAG of resource dependencies.
+在此示例中，在Pod`foo-775b9cbd88-ntxsl`*里面*进行观察，并记录所有*流向*Pod`baz-577db7d977-lsk2q`的所有流量。这样能有效的展示源自`foo-775b9cbd88-ntxsl`的流量，并且可用于定义资源依赖性的有向无环图。
 
 ```yaml
 resource:
@@ -102,11 +71,7 @@ edge:
     kind: Pod
 ```
 
-Alternatively, edges can also be observed *at* the `foo-775b9cbd88-ntxsl` pod
-and represent all the traffic *from* the `bar-5b48b5fb9c-7rw27` pod. This
-effectively shows how `foo-775b9cbd88-ntxsl` is handling the traffic destined
-for it from a specific source. Just like `to`, this data can be used to define a
-DAG of resource dependencies.
+或者，也可以在Pod`foo-775b9cbd88-ntxsl`*里面*进行观察，并记录*流出*Pod`bar-5b48b5fb9c-7rw27`的所有流量。 这样能有效的展示`foo-775b9cbd88-ntxsl`如何处理从特定源发往它的流量。 和`to`方向的指标类似，这些数据也可用于定义资源依赖性的有向无环图。
 
 ```yaml
 resource:
@@ -121,10 +86,7 @@ edge:
     kind: Pod
 ```
 
-Finally, `resource` can be as general or specific as desired. For example, with
-a `direction` of `to` and an empty `resource`, the metrics are observed *at*
-the `foo-775b9cbd88-ntxsl` pod and represent all traffic *to* the
-`foo-775b9cbd88-ntxsl` pod.
+最后，可以使用通配资源或依据需要指定资源。 例如，如果`direction`字段的值为`to`且`resource`字段为空，则会在Pod`foo-775b9cbd88-ntxsl`中观察流量，记录的是进入Pod`foo-775b9cbd88-ntxsl`的所有流量。
 
 ```yaml
 resource:
@@ -136,18 +98,15 @@ edge:
   resource: {}
 ```
 
-Note: `resource` could also contain only a namespace to select any traffic from
-that namespace or only `kind` to select specific types of incoming traffic.
+注意：`resource`字段也可以只包含一个Namespace资源，表示匹配从该Namespace中流经的所有流量，或者加上`kind`限定仅匹配特定类型资源相关的流量。
 
-Note: there is no requirement that metrics are actually being collected for
-resources selected by edges. As metrics are always observed *at* `resource`, it
-is possible to construct these entirely from the resource.
+注意：度量数据并非必须从资源的边缘上采集。由于指标总是在`resource`字段引用的资源*内部*进行的，因此完全可以直接采集资源上的全部流量。
 
-### TrafficMetricsList
+### 度量的资源范围
 
-There are three different ways to get a TrafficMetricsList:
+使用`TrafficMetricsList`对象的方式有三种：
 
-* Requesting a specific `kind` such as pods or namespaces.
+* 通过`resource.kind`字段指定要度量的资源类型，例如Pod或Namespace。
 
     ```yaml
     apiVersion: metrics.smi-spec.io/v1alpha1
@@ -158,10 +117,9 @@ There are three different ways to get a TrafficMetricsList:
     ...
     ```
 
-    Note: the values for `resource` would only be `kind`, `namespace` and
-    `apiVersion`.
+    注意：`resource`字段的值只能是`kind`、`namespace`和`apiVersion`。
 
-* Requesting a specific `kind` such as pods and filtering with a label selector:
+* 通过`resource.kind`字段指定度量的资源类型为Pod，同时使用`selector`字段设置标签选择器：
 
     ```yaml
     apiVersion: metrics.smi-spec.io/v1alpha1
@@ -175,10 +133,9 @@ There are three different ways to get a TrafficMetricsList:
     ...
     ```
 
-    Note: the label selector does *not* filter the metrics themselves, only the
-    items that show up in the list.
+    注意：标签选择器并*不会*过滤指标本身，只是改变被采集的资源对象清单。
 
-* Listing all the edges for a specific resource:
+* 指定单独一个资源的所有边缘流量：
 
     ```yaml
     apiVersion: metrics.smi-spec.io/v1alpha1
@@ -194,12 +151,11 @@ There are three different ways to get a TrafficMetricsList:
     ...
     ```
 
-    Note: this specific list is a sub-resource of `foo-775b9cbd88-ntxsl` from an
-    API perspective.
+    Note: 从API的角度来看，上述配置就是过滤出Pod名称是`foo-775b9cbd88-ntxsl`的资源子集。
 
 ### Kubernetes API
 
-The `traffic.metrics.k8s.io` API will be exposed via a `APIService`:
+产生的`traffic.metrics.k8s.io`API将会通过一个`APIService`对外公开：
 
 ```yaml
 apiVersion: apiregistration.k8s.io/v1
@@ -214,8 +170,7 @@ spec:
   version: v1beta1
 ```
 
-The default response, or requesting `/apis/metrics.smi-spec.io/v1alpha1/`
-would return:
+访问默认的服务路径，即发送请求到`/apis/metrics.smi-spec.io/v1alpha1/`时，将会返回：
 
 ```yaml
 apiVersion: v1
@@ -243,7 +198,7 @@ resources:
   - list
 ```
 
-The full list of resources for this list would be:
+这个完整的资源类型列表包括：
 
 * namespaces
 * nodes
@@ -256,15 +211,13 @@ The full list of resources for this list would be:
 * statefulsets
 * jobs
 
-For resource types that contain `pods`, such as `namespaces` and `deployments`,
-the metrics are aggregates of the `pods` contained within.
+对于包含pod（例如Namespace和Deployment）的资源类型，度量的数据是其中包含的Pod的聚合。
 
-## Use Cases
+## 运用场景
 
 ### Top
 
-Like `kubectl top`, a plugin could be written such as `kubectl traffic top` that
-shows the traffic metrics for resources.
+与`kubectl top`命令一样，可以编写插件，例如增加`kubectl traffic top`命令，用来显示资源的流量指标。
 
 ```bash
 $ kubectl traffic top pods
@@ -274,27 +227,22 @@ bar-f84f44b5b-dk4g9          75.47%   0.9rps           1ms
 baz-69c8bb6d5b-gn5rt         86.67%   1.8rps           2ms
 ```
 
-Implementation of this command would be a simple conversion of the API's
-response of a `TrafficMetricsList` into a table for display on the command line
-or a dashboard.
+实现这个命令需要做的是将TrafficMetricsList的API响应简单转换为表格结构，以便在命令行或仪表板上显示。
 
-### Canary
+### 金丝雀发布
 
-In combination with the TrafficSplit specification, a controller can:
+结合TrafficSplit规范，控制器可以：
 
-* Create a new deployment `v2`.
-* Add a new canary and service for `v2`.
-* Update the canary definition to send some traffic to `v2`.
-* Monitor for success rate to drop below 100%. If it does, rollback.
-* Update the canary definition to route more traffic.
-* Loop until all traffic is on `v2`.
+* 创建新的Deployment`v2`。
+* 为`v2`添加新的分流和Service。
+* 更新分流定义以将一些流量发送到`v2`。
+* 监控如果访问成功率降至100％以下，则立即回滚。
+* 继续更新分流定义以引入更多流量。
+* 循环直到所有流量都导入到`v2`。
 
-### Topologies
+### 流量拓扑
 
-Following the concept of `kubectl traffic top`, there could also be a
-`kubectl traffic topology` command. This could provide ascii graphs of the
-topology between applications. Alternative outputs could be graphviz's DOT
-language.
+遵循`kubectl traffic top`的思路，也可以设计出`kubectl traffic topology`命令。 用于提供应用程序之间流量拓扑结构的ASCII图示。或者是输出Graphviz的DOT语言文件。
 
 ```bash
 $ kubectl traffic topology deployment
@@ -305,14 +253,11 @@ $ kubectl traffic topology deployment
 +---------+     +--------+     +---------+      +-------+
 ```
 
-Implementation of this command would require multiple queries, one to get the
-list of all deployments and another to get the edges for each of those
-deployments. While this example shows command line usage, it should be
-possible dashboards such as Kiali entirely on top of this API.
+此命令的实现需要进行多个查询，一个用于获取所有Deployment的列表，另一个用于获取每个Deployment的边缘。虽然此示例展示的是一种使用命令行的方法，但完全可以基于此API将数据展示到Kiali等仪表板工具上。
 
 ## RBAC
 
-* View metrics for all resources and edges.
+* 授权查看所有资源和边缘的流量
 
     ```yaml
     apiVersion: rbac.authorization.k8s.io/v1beta1
@@ -326,7 +271,7 @@ possible dashboards such as Kiali entirely on top of this API.
       verbs: ["*"]
     ```
 
-* View only the metrics for edges of pods.
+* 仅授权查看Pod的边缘流量
 
     ```yaml
     apiVersion: rbac.authorization.k8s.io/v1beta1
@@ -340,106 +285,64 @@ possible dashboards such as Kiali entirely on top of this API.
       verbs: ["*"]
     ```
 
-## Example implementation
+## 示例实现
 
-This example implementation is included to illustrate how `TrafficMetrics` are
-surfaced. It does *not* prescribe a particular implementation. This example also
-does not serve as an example of how to consume the metrics provided.
+此示例实现用于展示`TrafficMetrics`如何提供流量指标。它并*不是*某个具体实现方的方案描述。此示例也不作为如何消费流量指标的参考标准。
 
 ![Metrics Architecture](traffic-metrics-sample/metrics.png)
 
-For this example implementation, metrics are being stored in Prometheus. These
-are being scraped [from Envoy](#envoy-mesh) periodically. The only component in
-this architecture that is custom is the `Traffic Metrics Shim`. All others do
-not require any modification.
+在这个例子中，度量指标存储在Prometheus中。这些数据是定期从[Envoy Mesh](#envoy-mesh)采集的。此结构中唯一的自定义的组件是`Traffic Metrics Shim`。其他的部分都无需任何定制。
 
-The shim maps from Kubernetes native API standards to the Prometheus store which
-is an implementation detail of the service mesh. As the shim itself is doing the
-mapping, any backend metrics store could be used.
+自定义的`Shim`组件将Kubernetes原生API的数据映射为Prometheus的存储格式，这属于实现服务网格时的内部细节。由于`Shim`组件能够进行结构映射，因此理论上可以用任何后端来存储度量数据。
 
-Walking through the request flow:
+整个请求流程如下：
 
-1. An end user fires off a request to the Kubernetes API Server:
+1. 终端用户向Kubernetes API Server发起一个请求：
 
     ```bash
     kubectl get --raw /apis/metrics.smi-spec.io/v1alpha1/namespaces/default/deployments/
     ```
 
-1. The Kubernetes API server forwards this request to the `Traffic Metrics
-Shim`.
+1. Kubernetes API server将查询请求转发给`Traffic Metrics Shim`组件。
 
-1. The shim issues multiple requests to Prometheus. An example for the total
-   requests grouped by success and failure would be:
+1. `Shim`组件向Prometheus发出多个请求。例如一个按成功和失败分组的总请求数查询：
 
     ```plain
     sum(requests_total{namespace='default',kind='deployment'}) by (name, success)
     ```
 
-    Note: there are multiple queries required here to fetch all the metrics for
-    a response.
+    注意：此处需要多个查询来获取响应的所有指标。
 
-1. On receiving the responses from Prometheus, the shim converts the values into
-   a `TrafficMesh` object for consumption by the end user.
+1. 在接收到来自Prometheus的响应时，`Shim`组件将结果转换为`TrafficMesh`对象以供终端用户使用。
 
 ### Envoy Mesh
 
 ![Envoy Mesh](traffic-metrics-sample/mesh.png)
 
-While the mesh itself is outside the scope of this example, it is valuable to
-see that piece of the architecture as well. Prometheus has a scrape config that
-targets pods with an Envoy sidecar and periodically requests
-`/stats?format=prometheus`.
+虽然这种网格本身不在此示例讨论的范围，但对于了解这个架构有一定价值。Prometheus有一个采集配置，能够定期通过`/stats?format=prometheus`接口获取Envoy Sidecar组件的Pod数据。
 
-## Tradeoffs
+## 设计取舍
 
-* APIService - it would be possible to simply be proscriptive of metrics and
-  label names for Prometheus, configure many of these responses as recording
-  rules and force integrations to query those directly. This feels like it
-  increases the bar for metrics stores to change their internal configuration
-  around to support this specification. There is also not a multi-tenant story
-  for Prometheus series visibility that maps across Kuberenetes RBAC. From the
-  other side, consumers of these metrics will have to do discovery of
-  Prometheus' location in the cluster and do some kind of queries to surface the
-  data that they need.
+* APIService - 可以简单地禁止Prometheus的指标和标签名称，将许多响应配置为记录规则并强制集成以直接查询这些响应。这感觉就像它增加了度量商店的标准，以改变其内部配置以支持此规范。对于普罗米修斯系列可视性而言，还没有一个多租户故事可以映射到Kuberenetes RBAC。另一方面，这些指标的消费者必须发现普罗米修斯在集群中的位置，并进行某种查询以显示他们需要的数据。
 
-* Edges - while it is valuable to see all the traffic metrics associated with a
-  specific resource, debugging regularly requires understanding the path that
-  traffic is taking between specific resources. Additionally, seeing the edges
-  opens up a new set of integrations such as topology graphs and more flexible
-  canary policy.
+* 简单的将指标和标签丢进Prometheus里也能够实现流量度量，将许多接口的响应配置为相应的记录规则，然后强制让集成方直接到下层去查询。这种办法就像是提高指标存储的标准，然后通过改变内部配置来适配这个规范。而且Prometheus在数据可见性上并没有与Kuberenetes RBAC相应的多租户概念。从另一方面来说，这些指标的消费者将不得不了解Prometheus节点在集群中的部署位置，然后进行某些查询以获得他们需要的数据。
 
-* Aggregation - being able to look at metrics across higher level concepts such
-  as deployments (imagine tracking v2 of a deployment during a canary rollout).
-  These are hard to aggregate without access to the underlying data and so it is
-  valuable to access the data pre-aggregated from the API perspective.
+* 基于边缘的采集 - 虽然查看与特定资源相关的所有流量指标很有价值，但通常在调试问题的时候需要了解的是特定资源之间的流量路径。此外，从边缘观察能够得到全新的视角，例如流量拓扑图和更灵活的金丝雀发布策略。
 
-* `custom.metrics` vs `metrics` styles - this API groups metrics together by
-  resource. The `custom.metrics.k8s.io` API presents a long list of metrics with
-  names that suggest the resource. Because the primary use is to fetch a group
-  of metrics associated with a resource, this API matches the `metrics.k8s.io`
-  style a little bit more.
+* 聚合 - 它能够在更上层的概念（例如Deployment）中查看指标（想象在金丝雀发布期间跟踪v2版本的Deployment）。如果不感知内部的信息，将指标聚合将变得很困难，因此提供访问预先汇总数据的API是非常有用的。
 
-* Counts - most users will want to see RPS and success rates instead of raw
-  counts. As these are trivial to calculate from success/failure counts and
-  cover up some important data, counts are being used.
+* `custom.metrics` vs `metrics`风格 - 有两类按资源将指标聚合在一起的API。`custom.metrics.k8s.io`风格API会返回一长串指标，其中包含相应资源的名称。而`metrics.k8s.io`风格API在请求时就需要指定资源类型。由于这里的主要用途是获取与资源关联的一组度量标准，因此后者的风格会更加适合一些。
 
-## Out of scope
+* 计数 - 大多数用户希望看到的是请求速率（Request Per Second）和成功率而不是原始的访问计数。不过由于从成功/失败的计数计算上述指标并不困难，同时为了避免掩盖一些重要信息，因此指标统一按计数记录。
 
-* Edge aggregation - it would be valuable to get a resource such as a pod and
-  see the edges for other aggregates such as deployments. For now, the queries
-  to do this are not defined.
-* Label selectors - this API uses label selectors to impact filtering of
-  resources and does not use these selectors for the actual metric series. Using
-  the selectors against metric series is very valuable, imagine getting
-  per-route metrics surfaced.
-* Historical data - while this API *could* support delivering historical data,
-  it is not called out explicitly right now. The primary use cases currently are
-  immediate requirements: how is the canary rollout going? what is my topology?
-  what is happening to my application right now?
+## 范围以外的事
 
-## Open Questions
+* 边缘聚合 - 获取诸如Pod资源并查看它与其他聚合（例如Deployment）的所有边缘也许是很有必要的。目前，规范没有定义执行此操作的查询方法。
 
-* stddev - the best integration for canary deployments or things like HPA would
-  be surfacing the stddev of metrics. Then, monitoring could be +/- outside of
-  the last measurements. This API is not particularly well setup to surface
-  these numbers and it might not be as useful as they look.
+* 标签选择器 - 目前的标签选择器仅仅被用于过滤采集的资源，而无法用于过滤度量指标的部分序列。针对度量指标的选择器是非常有价值的，试想一下获取单个路由的度量指标。
+
+* 历史数据 - 虽然通过API*能够*提供历史数据，但目前尚未被明确的利用起来。眼下的主要场景是即刻查询：金丝雀发布的进展情况如何？当前的流量拓扑是怎样的？我的应用现在发生了什么状况？
+
+## 开放性问题
+
+* 标准偏差（stddev） - 对于金丝雀部署或自动缩扩容（Horizontal Pod Autoscaler）之类的场景标准偏差是最好的指标集成方式。然后，就可以基于前一次测量结果展示增量的+/-。当前的API没有专门为这些数据进行设计，它或许并没有它们看起来那么有用。
