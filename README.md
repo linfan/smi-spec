@@ -49,3 +49,9 @@ SMI实际上是一系列Kubernetes自定义资源描述（CRD）和扩展API服�
 ### 许可协议
 
 此规范遵循[OWF Contributor License Agreement 1.0 - Copyright and Patent](http://www.openwebfoundation.org/legal/the-owf-1-0-agreements/owf-contributor-license-agreement-1-0---copyright-and-patent)许可协议，详细内容请参阅[LICENSE](./LICENSE)。
+
+---
+
+中文版不定期与官方原版内容同步。当前更新至主干版本：`1f1a87ab3120f2a0a0aec70857e27f7c4ec5aad6`
+
+欢迎通过Issue提供翻译建议，您也可以直接提交Pull Request参与翻译改进。
