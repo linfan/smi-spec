@@ -6,7 +6,7 @@
 
 流量分流资源只与*根节点*Service对象相关联。通过`spec.service`字段引用。`spec.service`的Service对象名可作为服务间通信的正式域名（FQDN）。对于未采用遵循此规范的将流量通过代理转发的*客户端*，将继续依照标准Kubernetes的Service方式分发流量。
 
-规范的实现方需按照`spec.backends`引用Service对象的`weight`字段相应的权重分发流量。每个后端都是一个具有不同的选择器和类型的Service对象。
+规范的实现方需按照`spec.backends`引用Service对象的`weight`字段相应的权重分发流量。每个后端都是一个具有不同的选择器和类型的Service对象。权重值只能是数值。
 
 ## 规范详述
 
@@ -14,19 +14,16 @@
 apiVersion: split.smi-spec.io/v1alpha1
 kind: TrafficSplit
 metadata:
-  name: my-weights
+  name: my-trafficsplit
 spec:
   # The root service that clients use to connect to the destination application.
-  service: numbers
+  service: my-website
   # Services inside the namespace with their own selectors, endpoints and configuration.
   backends:
-  - service: one
-    # Identical to resources, 1 = 1000m
-    weight: 10m
-  - service: two
-    weight: 100m
-  - service: three
-    weight: 1500m
+  - service: my-website-v1
+    weight: 50
+  - service: my-website-v2
+    weight: 50
 ```
 
 ### 端口
@@ -148,9 +145,9 @@ spec:
       service: foobar
       backends:
       - service: foobar-v1
-        weight: 1
+        weight: 100
       - service: foobar-v2
-        weight: 0m
+        weight: 0
     ```
 
     **注意：**上面的`TrafficSplit`资源在创建`foobar-v2`的Service之前就引用了它。遵循此顺序是有必要的，否则一些流量可能会通过`foobar`这个Service进入到新版本服务的Pod，因为这个Service会接收通往所有版本的流量。
@@ -176,9 +173,9 @@ spec:
       service: foobar
       backends:
       - service: foobar-v1
-        weight: 1
+        weight: 1000
       - service: foobar-v2
-        weight: 500m
+        weight: 500
     ```
 
     此时，SMI的实现会将大约33％的流量导向到`foobar-v2`。请注意，这是基于每个客户端而不是所有发往这些后端的全局请求流量，因为这些后端可以从其他的Kubernetes Service收到流量。
@@ -222,9 +219,9 @@ spec:
       service: foobar
       backends:
       - service: foobar-next
-        weight: 100m
+        weight: 100
       - service: foobar
-        weight: 900m
+        weight: 900
     ```
 
     在此示例中，90％的流量将被发送到名为`foobar`的Service对象。由于这是包含应用程序的多个版本的根节点Service，因此对用户流量进行流量分配的推理将变得十分困难。
@@ -250,9 +247,9 @@ spec:
       service: web
       backends:
       - service: web-next
-        weight: 100m
+        weight: 100
       - service: web-current
-        weight: 900m
+        weight: 900
 ```
 
 创建新的`TrafficSplit`对象时，它会实例化以下Kubernetes对象：
